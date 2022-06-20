@@ -1,20 +1,29 @@
 import 'dart:io';
+import 'dart:math';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_web3/models/wallet_connect_registry_listing.dart';
 import 'package:flutter_web3/utils/constants.dart';
+import 'package:flutter_web3/utils/credentials.dart';
+import 'package:http/http.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:walletconnect_dart/walletconnect_dart.dart';
 import 'package:walletconnect_secure_storage/walletconnect_secure_storage.dart';
+import 'package:web3dart/web3dart.dart';
 
 class WalletConnectController extends ChangeNotifier {
   late WalletConnect walletConnect;
-  late String account;
-  late int chainId;
+  String? account;
+  late int chainId = 5;
+  late int nonce = 0;
+  String bal = "N/A";
   late BlockchainFlavor blockchainFlavor;
   String statusMessage = 'Initialized';
   late WalletConnectRegistryListing walletListing;
+
+  var apiUrl =
+      "https://alfajores-forno.celo-testnet.org"; //Replace with your API
 
   Future<void> initWalletConnect() async {
     // Wallet Connect Session Storage - So we can persist connections
@@ -27,9 +36,8 @@ class WalletConnectController extends ChangeNotifier {
       session: session,
       sessionStorage: sessionStorage,
       clientMeta: const PeerMeta(
-        name: 'Flutter Rarible Demo',
-        description: 'Flutter Rarible Protocol Demo App',
-        url: 'https://www.rarible.org',
+        name: 'Celo Composer - Flutter',
+        url: 'https://celo.org',
       ),
     );
 
@@ -43,8 +51,10 @@ class WalletConnectController extends ChangeNotifier {
             'WalletConnect - Attempting to reuse existing connection for chainId ${session.chainId} and wallet address ${session.accounts[0]}.');
 
         account = session.accounts[0];
+        print(account);
         chainId = session.chainId;
         blockchainFlavor = BlockchainFlavorExtention.fromChainId(chainId);
+        getBalance();
         notifyListeners();
       }
     } else {
@@ -114,7 +124,7 @@ class WalletConnectController extends ChangeNotifier {
         logger.d(
             'WalletConnect - onDisconnect - minter: $account <- "Please Connect Wallet"');
 
-        account = 'Please Connect Wallet';
+        account = null;
         statusMessage = 'WalletConnect session disconnected.';
         notifyListeners();
         await initWalletConnect();
@@ -154,7 +164,7 @@ class WalletConnectController extends ChangeNotifier {
     SessionStatus session;
     try {
       session = await walletConnect.createSession(
-          chainId: 1,
+          chainId: 44787,
           onDisplayUri: (uri) async {
             // _displayUri = uri;
             logger.d('_displayUri updated with $uri');
@@ -218,5 +228,38 @@ class WalletConnectController extends ChangeNotifier {
       logger.e(
           'Failed to connect to wallet.  Bridge Overloaded? Could not Connect?');
     }
+  }
+
+  Future getBalance() async {
+    Credentials cred = CustomCredentials(walletConnect);
+    var address = await cred.extractAddress();
+
+    var httpClient = Client();
+    var ethClient = Web3Client(apiUrl, httpClient);
+    EtherAmount balance = await ethClient.getBalance(address);
+    nonce = await ethClient.getTransactionCount(address);
+    bal = "${balance.getValueInUnit(EtherUnit.ether)} CELO";
+    print("bal => $bal");
+    print("nonce => $nonce");
+    notifyListeners();
+  }
+
+  Future sendTransaction(String amount) async {
+    print(double.parse(amount));
+    final transaction = Transaction(
+      to: EthereumAddress.fromHex("0x82DeD0018A477F77AD35fc0378abf9445496295D"),
+      from: EthereumAddress.fromHex(account!),
+      gasPrice: EtherAmount.inWei(BigInt.one),
+      maxGas: 100000,
+      value: EtherAmount.fromUnitAndValue(
+        EtherUnit.wei,
+        BigInt.from(double.parse(amount) * pow(10, 18)),
+      ),
+      nonce: nonce,
+    );
+    var httpClient = Client();
+    Credentials cred = CustomCredentials(walletConnect);
+    var ethClient = Web3Client(apiUrl, httpClient);
+    final txBytes = await ethClient.sendTransaction(cred, transaction);
   }
 }
