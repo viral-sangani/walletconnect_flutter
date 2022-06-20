@@ -29,6 +29,7 @@ class App extends StatelessWidget {
     ThemeController themeController = context.watch<ThemeController>();
     return MaterialApp(
       title: 'Celo Composer - Flutter',
+      debugShowCheckedModeBanner: false,
       theme: ThemeConfig.lightTheme.copyWith(brightness: Brightness.light),
       darkTheme: ThemeConfig.darkTheme.copyWith(brightness: Brightness.dark),
       themeMode: themeController.isDarkMode ? ThemeMode.dark : ThemeMode.light,
